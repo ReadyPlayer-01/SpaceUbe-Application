@@ -38,15 +38,6 @@ CREATE TABLE Trip (
     FOREIGN KEY (DestinationPlanet) REFERENCES Planet(PlanetId)
 );
 
--- Create Flight Table
-CREATE TABLE Flight (
-    FlightId INT PRIMARY KEY IDENTITY(1,1),
-    AccountId INT,
-    TripId INT,
-    FOREIGN KEY (AccountId) REFERENCES Account(AccountId),
-    FOREIGN KEY (TripId) REFERENCES Trip(TripId)
-);
-
 
 alter table Planet
 add PlanetImageURL text;
@@ -60,7 +51,32 @@ alter column DistanceFromSun decimal(8, 2);
 alter table Trip
 add TripDistance decimal(10, 2);
 
--- Views: --
+alter table Trip
+add TripCost decimal(10,2);
+
+drop trigger trg_UpdateBalanceAfterTrip;
+
+drop view vw_UserTripHistory;
+
+drop view vw_TripDetails;
+
+drop table Flight;
+
+alter table Trip
+add AccountId int;
+
+alter table Trip
+add constraint FK_Trip_Account
+foreign key (AccountId) references Account(AccountId);
+
+alter table Spacecraft
+add CraftImageURL text;
+
+alter table Spacecraft
+add Description varchar(255);
+
+
+-- Views: --  
 -- ~~User and account together:
 
 create view vw_UserAccountInfo
@@ -89,7 +105,6 @@ from
 
 
 -- ~~Trip detail output:
-
 create view vw_TripDetails
 as 
 select 
@@ -99,7 +114,8 @@ select
     s.Speed as SpacecraftSpeed, 
     p1.PlanetName as OriginPlanet, 
     p2.PlanetName as DestinationPlanet,
-    ABS(p1.DistanceFromSun - p2.DistanceFromSun) as TripDistance -- Calculate distance between planets
+    ABS(p1.DistanceFromSun - p2.DistanceFromSun) as TripDistance,
+    t.TripCost
 from 
     Trip t
 join 
@@ -111,7 +127,6 @@ join
 
 
 -- ~~User trip history:
-
 create view vw_UserTripHistory
 as
 select
@@ -119,15 +134,14 @@ select
     t.FlightDate, 
     s.Type as SpacecraftType, 
     p1.PlanetName as OriginPlanet, 
-    p2.PlanetName as DestinationPlanet
+    p2.PlanetName as DestinationPlanet,
+    t.TripCost
 from 
     [User] u
 join 
     Account a on u.UserId = a.UserId
 join 
-    Flight f on a.AccountId = f.AccountId
-join 
-    Trip t on f.TripId = t.TripId
+    Trip t on a.AccountId = t.AccountId
 join 
     Spacecraft s on t.SpacecraftId = s.CraftId
 join 
@@ -135,39 +149,48 @@ join
 join 
     Planet p2 ON t.DestinationPlanet = p2.PlanetId;
 
+
 -- ~~~~~~~~~~~~
 -- Triggers: --
 -- ~~Update SpaceBux balance after payment:
 
 create trigger trg_UpdateBalanceAfterTrip
-on Flight
+on Trip
 after insert
 as 
 begin
     -- Declare variables for calculating the trip cost
     declare @TripDistance decimal(10, 2);
-    declare @TripCost int;
+    declare @TripCost decimal(10, 2);
     declare @AccountId int;
 
     -- Retrieve the TripDistance and AccountId from the inserted row
     select 
-        @TripDistance = t.TripDistance, 
-        @AccountId = f.AccountId
+        @TripDistance = ABS(p1.DistanceFromSun - p2.DistanceFromSun),
+        @AccountId = t.AccountId
     from 
-        Flight f
+        Trip t
     join 
-        Trip t on f.TripId = t.TripId
+        Planet p1 on t.OriginPlanet = p1.PlanetId
+    join 
+        Planet p2 on t.DestinationPlanet = p2.PlanetId
     where 
-        f.FlightId in (select FlightId from inserted);
+        t.TripId in (select TripId from inserted);
 
     -- Calculate the trip cost based on the distance
     set @TripCost = 10 + (1.33 * @TripDistance * 10);
+
+    -- Update the Trip table to store the TripCost
+    update Trip
+    set TripCost = @TripCost
+    where TripId in (select TripId from inserted);
 
     -- Update the SpaceBuxBalance in the Account table
     update Account
     set SpaceBuxBalance = SpaceBuxBalance - @TripCost
     where AccountId = @AccountId;
 end;
+
 
 
 -- ~~Delete user info:
@@ -192,11 +215,6 @@ end;
 
 
 
-
-
-
-
-
 insert into Planet (PlanetName, DistanceFromSun, PlanetImageURL)
 values 
 ('Pluto', 39.5, 'https://imgs.search.brave.com/UZ_oK95Zv-egg-C0fChBnc4R4VzXSluFuhRAzKEK7aE/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9zY2ll/bmNlLm5hc2EuZ292/L3dwLWNvbnRlbnQv/dXBsb2Fkcy8yMDIz/LzA5L0JJR19QX0NP/TE9SXzJfVFJVRV9D/T0xPUjFfMTk4MC5q/cGc_dz00MDk2JmZv/cm1hdD1qcGVn'),
@@ -210,5 +228,13 @@ values
 ('Neptune', 30.06, 'https://imgs.search.brave.com/zlspb8YeWVvFSXgJVKGLr4LliivAqV1CeDmffgR2F3w/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly90My5m/dGNkbi5uZXQvanBn/LzAzLzI4LzY2LzI0/LzM2MF9GXzMyODY2/MjQ4M19rTG51UGxj/SWdRUUNDTmJiWFpN/S3VEdVNHZUZ5VGRx/My5qcGc'); 
 
 
+insert into Spacecraft (Type, Speed, CraftImageURL, Description)
+values
+('Nano Cruiser', 50000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EddILNbC0GpAmn4rMCMatMkB0Pip0wY5JxMU7qHrxK6bKA?e=p773kn', 'This is a small, agile craft built for quick hops between nearby planets'),
+('Quantum Shuttle', 150000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EfbqWZRfCsxPvthfBeY9J0wBN0H04k3_2JxA4t6dM1RhUw?e=ezBMuu', 'This craft is used for standard passenger and cargo transport, with decent speed for interplanetary travel'),
+('Stellar Freighter', 100000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EegcDnyXZdhGlO8IZSpW2bEBNrz-p4jtUq9EM-Dyx53KkA?e=2Rolwz', 'A large, heavy craft for transporting bulk cargo. Slower due to size, but still capable of interplanetary trips'),
+('Galactic Immersion (Special)', 300000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EVF_gHfNx7lBqkaug_erCWQB3uL7ytYA1v0VvwDYr0WIFQ?e=G2vLtO', 'A high-end, luxurious craft designed for long-distance or short-range intergalactic travel. Super fast, almost light-speed'),
+('Eco Celestial Dart', 75000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EdHP9d0CamJChBHEQY0Ok8sB7SXW0YPaoS9Jx-mOkKn6_Q?e=QpRhOm', 'A small, energy-efficient craft focused on sustainability over speed'),
+('Eco Arcadia Hauler', 120000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EbBD4nE7t8xEisuKQgr6kb4Bo9bCOWldh8wdXOoqVPmCPQ?e=iadPMt', 'Large, sustainable craft designed to transport both passengers and cargo over longer distances with a balance of speed and efficiency');
 
-tools to make handling database easier, views, triggers, delete user shoudld delete all info, view with account and user tables together, view with trip spacecraft planet where we show speed and trip details
+-- tools to make handling database easier?
