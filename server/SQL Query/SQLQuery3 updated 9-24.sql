@@ -228,13 +228,53 @@ values
 ('Neptune', 30.06, 'https://imgs.search.brave.com/zlspb8YeWVvFSXgJVKGLr4LliivAqV1CeDmffgR2F3w/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly90My5m/dGNkbi5uZXQvanBn/LzAzLzI4LzY2LzI0/LzM2MF9GXzMyODY2/MjQ4M19rTG51UGxj/SWdRUUNDTmJiWFpN/S3VEdVNHZUZ5VGRx/My5qcGc'); 
 
 
-insert into Spacecraft (Type, Speed, CraftImageURL, Description)
+insert into Spacecraft (Type, Speed, CraftImageURL, Description) --CraftImageURL === Images from directory path tbd
 values
-('Nano Cruiser', 50000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EddILNbC0GpAmn4rMCMatMkB0Pip0wY5JxMU7qHrxK6bKA?e=p773kn', 'This is a small, agile craft built for quick hops between nearby planets'),
-('Quantum Shuttle', 150000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EfbqWZRfCsxPvthfBeY9J0wBN0H04k3_2JxA4t6dM1RhUw?e=ezBMuu', 'This craft is used for standard passenger and cargo transport, with decent speed for interplanetary travel'),
-('Stellar Freighter', 100000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EegcDnyXZdhGlO8IZSpW2bEBNrz-p4jtUq9EM-Dyx53KkA?e=2Rolwz', 'A large, heavy craft for transporting bulk cargo. Slower due to size, but still capable of interplanetary trips'),
-('Galactic Immersion (Special)', 300000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EVF_gHfNx7lBqkaug_erCWQB3uL7ytYA1v0VvwDYr0WIFQ?e=G2vLtO', 'A high-end, luxurious craft designed for long-distance or short-range intergalactic travel. Super fast, almost light-speed'),
-('Eco Celestial Dart', 75000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EdHP9d0CamJChBHEQY0Ok8sB7SXW0YPaoS9Jx-mOkKn6_Q?e=QpRhOm', 'A small, energy-efficient craft focused on sustainability over speed'),
-('Eco Arcadia Hauler', 120000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/EbBD4nE7t8xEisuKQgr6kb4Bo9bCOWldh8wdXOoqVPmCPQ?e=iadPMt', 'Large, sustainable craft designed to transport both passengers and cargo over longer distances with a balance of speed and efficiency');
+('Nano Cruiser', 50000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/IQTXSCzWwtBqQJp-KzAjGrTJAe68yDXv317xLbrru9lWrec?width=912&height=1144', 'This is a small, agile craft built for quick hops between nearby planets'),
+('Quantum Shuttle', 150000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/IQT26lmUXwrMT77YXwXmPSdMAdshM4tBxjwKxgY1_xpF1ZE?width=512&height=512', 'This craft is used for standard passenger and cargo transport, with decent speed for interplanetary travel'),
+('Stellar Freighter', 100000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/IQToHA58l2XYRpTvCGUqVtmxAYGYBgCA0TlRHJyI9Q2TVRA?width=512&height=512', 'A large, heavy craft for transporting bulk cargo. Slower due to size, but still capable of interplanetary trips'),
+('Galactic Immersion (Special)', 300000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/IQRRf4B3zce5QapGroP3qwlkATeiPc9yGozz99_zQ6ze5sQ?width=912&height=1144', 'A high-end, luxurious craft designed for long-distance or short-range intergalactic travel. Super fast, almost light-speed'),
+('Eco Celestial Dart', 75000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/IQTRz_XdAmpiQoQRxEGNDpPLAcVyzpzKfajg9jOKFPDnZFM?width=512&height=512', 'A small, energy-efficient craft focused on sustainability over speed'),
+('Eco Arcadia Hauler', 120000, 'https://1drv.ms/i/c/0a8606015b3bf0e4/IQSwQ-JxO7fMRIrLikIK-pG-AVRGHeEaYFp6JmL8N44R30I?width=912&height=1144', 'Large, sustainable craft designed to transport both passengers and cargo over longer distances with a balance of speed and efficiency');
+
+
+SELECT Type, Speed, 
+       CAST(CraftImageURL AS varchar(max)) AS CraftImageURL, 
+       Description, 
+       COUNT(*)
+FROM Spacecraft
+GROUP BY Type, Speed, 
+         CAST(CraftImageURL AS varchar(max)), 
+         Description
+HAVING COUNT(*) > 1;
+
+WITH CTE AS (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY Type, Speed, 
+                            CAST(CraftImageURL AS varchar(max)), 
+                            Description 
+               ORDER BY CraftId
+           ) AS RowNum
+    FROM Spacecraft
+)
+DELETE FROM CTE
+WHERE RowNum > 1;
+
+WITH CTE AS (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY Type, Speed, 
+                            CAST(Description AS varchar(max))
+               ORDER BY CraftId
+           ) AS RowNum
+    FROM Spacecraft
+    WHERE CraftImageURL NOT LIKE '%width=%' -- This condition identifies the URLs you don't want to keep
+)
+DELETE FROM CTE
+WHERE RowNum = 1;
+
+select * from Spacecraft
+
 
 -- tools to make handling database easier?
